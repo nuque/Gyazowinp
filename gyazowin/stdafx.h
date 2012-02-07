@@ -52,4 +52,4 @@ using namespace Gdiplus;
 #include <sstream>
 #include <string>
 #include <vector>
-
+#include <map>

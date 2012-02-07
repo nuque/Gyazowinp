@@ -12,6 +12,7 @@ TCHAR *szWindowClassL	= _T("GYAZOWINL");	// レイヤー ウィンドウ クラス名
 HWND hLayerWnd;
 
 int ofX, ofY;	// 画面オフセット
+std::map<std::wstring, std::wstring> g_Settings;
 
 // プロトタイプ宣言
 ATOM				MyRegisterClass(HINSTANCE hInstance);
@@ -29,7 +30,7 @@ BOOL				convertPNG(LPCTSTR destFile, LPCTSTR srcFile);
 BOOL				savePNG(LPCTSTR fileName, HBITMAP newBMP);
 BOOL				uploadFile(HWND hwnd, LPCTSTR fileName);
 std::string			getId();
-BOOL				saveId(const WCHAR* str);
+std::map<std::wstring, std::wstring> loadSettings(LPCWSTR fileName, LPCWSTR sectionName);
 
 // エントリーポイント
 int APIENTRY _tWinMain(HINSTANCE hInstance,
@@ -56,6 +57,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
 	// カレントディレクトリを exe と同じ場所に設定
 	SetCurrentDirectory(szThisPath);
+
+	g_Settings = loadSettings(_T("gyazowin+.ini"), _T("gyazowin+"));
 
 	// 引数にファイルが指定されていたら
 	if ( 2 == __argc )
@@ -100,6 +103,35 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 	}
 
 	return (int) msg.wParam;
+}
+
+// 設定をロードする
+std::map<std::wstring, std::wstring> loadSettings(LPCWSTR fileName, LPCWSTR sectionName)
+{
+	std::map<std::wstring, std::wstring> settings;
+	TCHAR wcFilePath[MAX_PATH];
+	TCHAR wcSettings[32767];
+	TCHAR *lpwcCurrent;
+	TCHAR *lpwcString;
+	TCHAR *lpwcContext;
+	size_t len;
+	std::wstring key;
+	std::wstring value;
+
+	GetFullPathName(fileName, MAX_PATH, wcFilePath, NULL);
+	GetPrivateProfileSection(sectionName, wcSettings, 32767, wcFilePath);
+
+	lpwcCurrent = wcSettings;
+	while (*lpwcCurrent) {
+		len = wcslen(lpwcCurrent);
+		lpwcString = wcstok_s(lpwcCurrent, _T("="), &lpwcContext);
+		key = std::wstring(lpwcString);
+		value = std::wstring(lpwcString + wcslen(lpwcString) + 1);
+		settings[key] = value;
+		lpwcCurrent += len + 1;
+	}
+
+	return settings;
 }
 
 // ヘッダを見て PNG 画像かどうか(一応)チェック
@@ -791,8 +823,8 @@ BOOL saveId(const WCHAR* str)
 // PNG ファイルをアップロードする.
 BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 {
-	const TCHAR* UPLOAD_SERVER	= _T("gyazo.com");
-	const TCHAR* UPLOAD_PATH	= _T("/upload.cgi");
+//	const TCHAR* UPLOAD_SERVER	= _T("gyazo.com");
+//	const TCHAR* UPLOAD_PATH	= _T("/upload.cgi");
 
 	const char*  sBoundary = "----BOUNDARYBOUNDARY----";		// boundary
 	const char   sCrLf[]   = { 0xd, 0xa, 0x0 };					// 改行(CR+LF)
@@ -801,7 +833,22 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 
 	std::ostringstream	buf;	// 送信メッセージ
 	std::string			idStr;	// ID
-	
+
+	LPCWSTR lpwcUploadServer;	// アップロード先サーバ
+	LPCWSTR lpwcUploadPath;		// アップロード先パス
+
+	LPCWSTR lpwcId;			// 認証用ID
+	LPCWSTR lpwcPassword;	// 認証用パスワード
+
+	DWORD dwFlags;	// フラグ
+
+	// アップロード確認
+	if (g_Settings.count(L"up_dialog") && g_Settings[L"up_dialog"] == L"yes") {
+		if (MessageBox(hwnd,_T("アップロードしますか？"),_T("Question"),MB_OK|MB_ICONQUESTION|MB_YESNO) != IDYES) {
+			return TRUE;
+		}
+	}
+
 	// ID を取得
 	idStr = getId();
 
@@ -820,7 +867,7 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 	buf << "--";
 	buf << sBoundary;
 	buf << sCrLf;
-	buf << "content-disposition: form-data; name=\"imagedata\"; filename=\"gyazo.com\"";
+	buf << "content-disposition: form-data; name=\"imagedata\"; filename=\"data.png\"";
 	buf << sCrLf;
 	//buf << "Content-type: image/png";	// 一応
 	//buf << sCrLf;
@@ -847,6 +894,35 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 	// メッセージ完成
 	std::string oMsg(buf.str());
 
+	// アップロード先
+	if (g_Settings.count(L"upload_server")) {
+		lpwcUploadServer = g_Settings[L"upload_server"].c_str();
+	}else{
+		lpwcUploadServer = L"gyazo.com";
+	}
+	if (g_Settings.count(L"upload_path")) {
+		lpwcUploadPath = g_Settings[L"upload_path"].c_str();
+	}else{
+		lpwcUploadPath = L"/upload.cgi";
+	}
+
+	// 認証データ準備
+	if (g_Settings.count(L"use_auth") && g_Settings[L"use_auth"] == L"yes") {
+		if (g_Settings.count(L"auth_id")) {
+			lpwcId = g_Settings[L"auth_id"].c_str();
+		}else{
+			lpwcId = L"";
+		}
+		if (g_Settings.count(L"auth_pw")) {
+			lpwcPassword = g_Settings[L"auth_pw"].c_str();
+		}else{
+			lpwcPassword = L"";
+		}
+	}else{
+		lpwcId = NULL;
+		lpwcPassword = NULL;
+	}
+
 	// WinInet を準備 (proxy は 規定の設定を利用)
 	HINTERNET hSession    = InternetOpen(szTitle, 
 		INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
@@ -855,11 +931,20 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 			szTitle, MB_ICONERROR | MB_OK);
 		return FALSE;
 	}
-	
+
+	// SSL
+	dwFlags = INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_RELOAD;
+	if (g_Settings.count(L"use_ssl") && g_Settings[L"use_ssl"] == L"yes") {
+		dwFlags |= INTERNET_FLAG_SECURE;
+		if (g_Settings.count(L"ssl_check_cert") && g_Settings[L"ssl_check_cert"] == L"no") {
+			dwFlags |= INTERNET_FLAG_IGNORE_CERT_CN_INVALID | INTERNET_FLAG_IGNORE_CERT_DATE_INVALID;
+		}
+	}
+
 	// 接続先
 	HINTERNET hConnection = InternetConnect(hSession, 
-		UPLOAD_SERVER, INTERNET_DEFAULT_HTTP_PORT,
-		NULL, NULL, INTERNET_SERVICE_HTTP, 0, NULL);
+		lpwcUploadServer, INTERNET_DEFAULT_HTTP_PORT,
+		lpwcId, lpwcPassword, INTERNET_SERVICE_HTTP, 0, NULL);
 	if(NULL == hSession) {
 		MessageBox(hwnd, _T("Cannot initiate connection"),
 			szTitle, MB_ICONERROR | MB_OK);
@@ -868,8 +953,8 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 
 	// 要求先の設定
 	HINTERNET hRequest    = HttpOpenRequest(hConnection,
-		_T("POST"), UPLOAD_PATH, NULL,
-		NULL, NULL, INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_RELOAD, NULL);
+		_T("POST"), lpwcUploadPath, NULL,
+		NULL, NULL, dwFlags, NULL);
 	if(NULL == hSession) {
 		MessageBox(hwnd, _T("Cannot compose post request"),
 			szTitle, MB_ICONERROR | MB_OK);
@@ -937,10 +1022,17 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 			result += '\0';
 
 			// クリップボードに URL をコピー
-			setClipBoardText(result.c_str());
+			if (g_Settings.count(L"copy_url") && g_Settings[L"copy_url"] == L"yes") {
+				setClipBoardText(result.c_str());
+				if (g_Settings.count(L"copy_dialog") && g_Settings[L"copy_dialog"] == L"yes") {
+					MessageBox(hwnd,_T("クリップボードにアドレスをコピーしました"),_T("Info"),MB_OK|MB_ICONINFORMATION);
+				}
+			}
 			
 			// URL を起動
-			execUrl(result.c_str()); 
+			if (g_Settings.count(L"open_browser") && g_Settings[L"open_browser"] == L"yes") {
+				execUrl(result.c_str());
+			}
 
 			return TRUE;
 		}
