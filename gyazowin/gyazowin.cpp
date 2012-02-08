@@ -6,7 +6,7 @@
 
 // グローバル変数:
 HINSTANCE hInst;							// 現在のインターフェイス
-TCHAR *szTitle			= _T("Gyazo");		// タイトル バーのテキスト
+TCHAR *szTitle			= _T("Gyazo+");		// タイトル バーのテキスト
 TCHAR *szWindowClass	= _T("GYAZOWIN");	// メイン ウィンドウ クラス名
 TCHAR *szWindowClassL	= _T("GYAZOWINL");	// レイヤー ウィンドウ クラス名
 HWND hLayerWnd;
