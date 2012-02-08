@@ -1,3 +1,13 @@
+gyazoiwnp by tyoro
+
+NVさんのgyazowin+の拡張をtnjの最新ソースに適用したものです。
+ライセンスはgyazowin+に準拠します。
+
+以下、gyazowin+の添付readmeままです。
+
+2012 02/08
+------------------
+
 gyazowin+ v1.00 by NV
 gyazowin by tnj(http://nothing.sh/blog/archives/44)
 
